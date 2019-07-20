@@ -6,38 +6,67 @@ import matplotlib.pyplot as plt
 
 
 class RandomStockPrices:
-    def __init__(self, start_date='2018-01-01', num_days=252, num_assets=1000,
-                 mean_mean=0.05, mean_std=0.05):
+    def __init__(self, start_date='1956-01-01', years=1, num_assets=1000, constant_dist=False):
 
         self.start_date = start_date
-        self.num_days = num_days
         self.num_assets = num_assets
-        self.mean_mean=mean_mean
-        self.mean_std = mean_std
-        self._create_prices()
+        self.years = years
+        if constant_dist:
+            self._create_prices_constant_dist()
+        else:
+            self._create_prices()
 
-    def _create_prices(self):
-        dates = pd.bdate_range(start=self.start_date, periods=self.num_days)
+    def _create_prices_constant_dist(self):
+        dates = pd.bdate_range(start=self.start_date, periods=self.years*252)
         days = len(dates)
         prices = np.zeros((days, self.num_assets))
         returns = np.zeros((days, self.num_assets))
         initial_prices = 5.0 + np.random.gamma(2, 30, self.num_assets)
-        #plt.hist(initial_prices)
-        #plt.hist(initial_prices)
-        #plt.show()
         distributions = list(zip(
-            np.random.normal(self.mean_mean, self.mean_std, self.num_assets),
+            np.random.normal(0.10, 0.10, self.num_assets),
             0.04 + np.random.gamma(6, 2, self.num_assets) / 100))
         self.distributions = distributions
         for i in range(self.num_assets):
             mean, std = distributions[i]
-            mean /= 252
-            std /= np.sqrt(252)
-            returns[:,i] = np.random.normal(mean, std, days)
-            price = initial_prices[i]
-            for j in range(days):
-                price = price * (1+returns[j,i])
-                prices[j,i] = price
+            dt = 1.0/252
+            sr_dt = np.sqrt(dt)
+            drift = (mean - (std**2)/2)*dt
+            diffusion = std * sr_dt * np.random.randn(days)
+            returns[:,i] = drift + diffusion
+            exp_returns = np.exp(returns[:,i])
+            prices[:,i] = initial_prices[i] * np.cumprod(exp_returns)
+
+        tickers = ['TICK{}'.format(i) for i in range(self.num_assets)]
+        self.prices = pd.DataFrame(prices, index=dates, columns=tickers)
+        self.returns = pd.DataFrame(returns, index=dates, columns=tickers)
+
+    def _create_prices(self):
+        dates = pd.bdate_range(start=self.start_date, periods=self.years*252)
+        days = len(dates)
+        prices = np.zeros((self.years*252, self.num_assets))
+        returns = np.zeros((self.years*252, self.num_assets))
+        initial_prices = 5.0 + np.random.gamma(2, 30, self.num_assets)
+        yearly_distributions = np.random.normal(0.10, 0.20, self.years)
+
+        for i in range(self.years):
+            yr_mean = yearly_distributions[i]
+            distributions = list(zip(
+                np.random.normal(yr_mean, 0.05, self.num_assets),
+                0.04 + np.random.gamma(6, 2, self.num_assets) / 100))
+            for j in range(self.num_assets):
+                mean, std = distributions[j]
+                dt = 1.0/252.0
+                sr_dt = np.sqrt(dt)
+                drift = (mean - (std**2)/2) * dt
+                diffusion = np.random.randn(252) * sr_dt * std
+                start_idx = i*252
+                end_idx = (i+1)*252
+                returns[start_idx:end_idx,j] = drift + diffusion
+
+        for j in range(self.num_assets):
+            price = initial_prices[j]
+            exp_returns = np.exp(returns[:,j])
+            prices[:,j] = price * np.cumprod(exp_returns)
 
         tickers = ['TICK{}'.format(i) for i in range(self.num_assets)]
         self.prices = pd.DataFrame(prices, index=dates, columns=tickers)
