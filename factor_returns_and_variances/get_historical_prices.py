@@ -16,7 +16,7 @@ class HistoricalPrices:
             prices = prices.append(pd.read_csv(filename))
 
         prices.columns = ['ticker', 'date', 'high', 'low', 'adjclose', 'volume']
-        self.prices = prices.set_index('date')
+        self.prices = prices.set_index(['ticker', 'date'])
 
 
 
